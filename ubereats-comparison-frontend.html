@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UberEats: Kafka+CQRS vs Blocking</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Syne:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0e0e12;
+    --surface: #16161c;
+    --surface2: #1e1e26;
+    --border: #2a2a38;
+    --kafka: #06d6a0;
+    --kafka-dim: #06d6a020;
+    --block: #ef476f;
+    --block-dim: #ef476f20;
+    --amber: #ffd166;
+    --text: #e8e8f0;
+    --muted: #7070a0;
+    --font-head: 'Syne', sans-serif;
+    --font-code: 'JetBrains Mono', monospace;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-code);
+    font-size: 13px;
+    min-height: 100vh;
+    padding: 24px;
+  }
+
+  h1 {
+    font-family: var(--font-head);
+    font-size: 22px;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+    margin-bottom: 4px;
+    background: linear-gradient(90deg, var(--kafka), var(--amber));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .subtitle {
+    color: var(--muted);
+    font-size: 12px;
+    margin-bottom: 24px;
+  }
+
+  .panels {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+
+  @media (max-width: 720px) {
+    .panels { grid-template-columns: 1fr; }
+  }
+
+  .panel {
+    background: var(--surface);
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    overflow: hidden;
+  }
+
+  .panel-header {
+    padding: 14px 18px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .panel-header .dot {
+    width: 10px; height: 10px; border-radius: 50%;
+  }
+
+  .dot-kafka { background: var(--kafka); box-shadow: 0 0 8px var(--kafka); }
+  .dot-block { background: var(--block); box-shadow: 0 0 8px var(--block); }
+
+  .panel-title {
+    font-family: var(--font-head);
+    font-weight: 600;
+    font-size: 13px;
+    flex: 1;
+  }
+
+  .badge {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 20px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+  }
+
+  .badge-kafka { background: var(--kafka-dim); color: var(--kafka); border: 1px solid var(--kafka)40; }
+  .badge-block { background: var(--block-dim); color: var(--block); border: 1px solid var(--block)40; }
+
+  .panel-body { padding: 16px 18px; }
+
+  /* Timeline */
+  .timeline {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .step {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    transition: all 0.3s;
+    opacity: 0.35;
+    position: relative;
+  }
+
+  .step.active { opacity: 1; border-color: var(--kafka); }
+  .step.active-block { opacity: 1; border-color: var(--block); }
+  .step.done { opacity: 0.8; }
+  .step.done-block { opacity: 0.8; }
+
+  .step-icon {
+    width: 28px; height: 28px;
+    border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px;
+    flex-shrink: 0;
+  }
+
+  .step-info { flex: 1; min-width: 0; }
+  .step-name { font-size: 12px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .step-detail { font-size: 10px; color: var(--muted); margin-top: 1px; }
+
+  .step-ms {
+    font-size: 10px;
+    font-weight: 700;
+    min-width: 40px;
+    text-align: right;
+  }
+
+  .step-ms.kafka-ms { color: var(--kafka); }
+  .step-ms.block-ms { color: var(--block); }
+
+  /* Progress bar */
+  .progress-wrap {
+    height: 3px;
+    background: var(--border);
+    border-radius: 2px;
+    margin: 12px 0 8px;
+    overflow: hidden;
+  }
+
+  .progress-bar {
+    height: 100%;
+    width: 0;
+    border-radius: 2px;
+    transition: width 0.3s ease;
+  }
+
+  .pb-kafka { background: var(--kafka); }
+  .pb-block { background: var(--block); }
+
+  /* Latency scoreboard */
+  .scorecard {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 10px;
+    padding: 10px 14px;
+    background: var(--surface2);
+    border-radius: 8px;
+    border: 1px solid var(--border);
+  }
+
+  .score-label { color: var(--muted); font-size: 11px; }
+
+  .score-val {
+    font-family: var(--font-head);
+    font-size: 20px;
+    font-weight: 800;
+  }
+
+  .score-val.kafka { color: var(--kafka); }
+  .score-val.block { color: var(--block); }
+
+  /* Control bar */
+  .controls {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+  }
+
+  .btn {
+    font-family: var(--font-code);
+    font-size: 12px;
+    font-weight: 700;
+    padding: 8px 20px;
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+    transition: all 0.15s;
+    letter-spacing: 0.3px;
+  }
+
+  .btn-primary {
+    background: var(--kafka);
+    color: #0e0e12;
+  }
+
+  .btn-primary:hover { filter: brightness(1.1); transform: translateY(-1px); }
+  .btn-primary:active { transform: translateY(0); }
+
+  .btn-outline {
+    background: transparent;
+    color: var(--muted);
+    border: 1px solid var(--border);
+  }
+
+  .btn-outline:hover { border-color: var(--muted); color: var(--text); }
+
+  .speed-control {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--muted);
+    font-size: 11px;
+  }
+
+  .speed-control input {
+    width: 80px;
+    accent-color: var(--amber);
+  }
+
+  /* Event log */
+  .event-log {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 18px;
+    margin-bottom: 24px;
+  }
+
+  .log-title {
+    font-family: var(--font-head);
+    font-weight: 600;
+    font-size: 12px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 10px;
+  }
+
+  .log-entries {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-height: 160px;
+    overflow-y: auto;
+  }
+
+  .log-entry {
+    display: flex;
+    gap: 10px;
+    font-size: 11px;
+    padding: 4px 0;
+    border-bottom: 1px solid var(--border);
+    animation: fadeIn 0.2s ease;
+  }
+
+  .log-entry:last-child { border-bottom: none; }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .log-time { color: var(--muted); min-width: 55px; }
+  .log-source { min-width: 70px; font-weight: 700; }
+  .log-kafka { color: var(--kafka); }
+  .log-block { color: var(--block); }
+  .log-system { color: var(--amber); }
+  .log-msg { color: var(--text); }
+
+  /* Verdict */
+  .verdict {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+  }
+
+  @media (max-width: 600px) {
+    .verdict { grid-template-columns: 1fr; }
+  }
+
+  .verdict-item {
+    padding: 12px 14px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+  }
+
+  .verdict-item h3 {
+    font-family: var(--font-head);
+    font-size: 12px;
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+
+  .verdict-item p {
+    font-size: 11px;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+
+  .tag-good { color: var(--kafka); }
+  .tag-bad { color: var(--block); }
+
+  /* Blinking cursor effect */
+  .blink {
+    animation: blink 1s step-end infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* Async label */
+  .async-pill {
+    font-size: 9px;
+    padding: 1px 6px;
+    background: var(--kafka-dim);
+    color: var(--kafka);
+    border-radius: 20px;
+    font-weight: 700;
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    letter-spacing: 0.5px;
+  }
+</style>
+</head>
+<body>
+
+<h1>Kafka + CQRS vs Blocking</h1>
+<p class="subtitle">UberEats order flow — tap "Place Order" to simulate both architectures side-by-side</p>
+
+<div class="controls">
+  <button class="btn btn-primary" id="runBtn" onclick="runSimulation()">▶ Place Order</button>
+  <button class="btn btn-outline" onclick="resetAll()">↺ Reset</button>
+  <div class="speed-control">
+    <span>Speed</span>
+    <input type="range" id="speedRange" min="0.5" max="3" step="0.5" value="1">
+    <span id="speedLabel">1×</span>
+  </div>
+</div>
+
+<div class="panels">
+  <!-- KAFKA + CQRS panel -->
+  <div class="panel">
+    <div class="panel-header">
+      <div class="dot dot-kafka"></div>
+      <div class="panel-title">Kafka + CQRS + Microservices</div>
+      <span class="badge badge-kafka">ASYNC</span>
+    </div>
+    <div class="panel-body">
+      <div class="timeline" id="kafka-timeline">
+        <div class="step" id="k-step-0">
+          <div class="step-icon">📥</div>
+          <div class="step-info">
+            <div class="step-name">HTTP Request received</div>
+            <div class="step-detail">POST /orders → OrdersController</div>
+          </div>
+          <div class="step-ms kafka-ms" id="k-ms-0">—</div>
+        </div>
+        <div class="step" id="k-step-1">
+          <div class="step-icon">💾</div>
+          <div class="step-info">
+            <div class="step-name">PlaceOrderCommand dispatched</div>
+            <div class="step-detail">CommandBus → PlaceOrderHandler</div>
+          </div>
+          <div class="step-ms kafka-ms" id="k-ms-1">—</div>
+        </div>
+        <div class="step" id="k-step-2">
+          <div class="step-icon">🗄️</div>
+          <div class="step-info">
+            <div class="step-name">Write DB: order persisted</div>
+            <div class="step-detail">status: PENDING | write replica</div>
+          </div>
+          <div class="step-ms kafka-ms" id="k-ms-2">—</div>
+        </div>
+        <div class="step" id="k-step-3">
+          <div class="step-icon">📤</div>
+          <div class="step-info">
+            <div class="step-name">OrderPlacedEvent → Kafka</div>
+            <div class="step-detail">Topic: orders.placed | fire & forget</div>
+          </div>
+          <div class="step-ms kafka-ms" id="k-ms-3">—</div>
+          <span class="async-pill">ASYNC</span>
+        </div>
+        <div class="step" id="k-step-4">
+          <div class="step-icon">✅</div>
+          <div class="step-info">
+            <div class="step-name">202 Accepted returned to client</div>
+            <div class="step-detail">{ orderId, status: "PENDING" }</div>
+          </div>
+          <div class="step-ms kafka-ms" id="k-ms-4">—</div>
+        </div>
+        <!-- Kafka async section -->
+        <div style="margin: 6px 0; padding: 4px 10px; font-size: 10px; color: var(--muted); border-left: 2px solid var(--kafka)40;">
+          ↓ Kafka consumers react independently (async, non-blocking)
+        </div>
+        <div class="step" id="k-step-5">
+          <div class="step-icon">💳</div>
+          <div class="step-info">
+            <div class="step-name">payment-service charges card</div>
+            <div class="step-detail">Consumer: orders.placed</div>
+          </div>
+          <div class="step-ms kafka-ms" id="k-ms-5">—</div>
+          <span class="async-pill">ASYNC</span>
+        </div>
+        <div class="step" id="k-step-6">
+          <div class="step-icon">🍕</div>
+          <div class="step-info">
+            <div class="step-name">restaurant-service notified</div>
+            <div class="step-detail">Consumer: orders.placed</div>
+          </div>
+          <div class="step-ms kafka-ms" id="k-ms-6">—</div>
+          <span class="async-pill">ASYNC</span>
+        </div>
+        <div class="step" id="k-step-7">
+          <div class="step-icon">🛵</div>
+          <div class="step-info">
+            <div class="step-name">dispatch-service assigns driver</div>
+            <div class="step-detail">Consumer: payments.completed</div>
+          </div>
+          <div class="step-ms kafka-ms" id="k-ms-7">—</div>
+          <span class="async-pill">ASYNC</span>
+        </div>
+      </div>
+      <div class="progress-wrap">
+        <div class="progress-bar pb-kafka" id="k-progress"></div>
+      </div>
+      <div class="scorecard">
+        <div>
+          <div class="score-label">HTTP Response time</div>
+          <div class="score-val kafka" id="k-total">—</div>
+        </div>
+        <div style="text-align:right">
+          <div class="score-label">Client waits for</div>
+          <div style="font-size:11px; color: var(--kafka); margin-top:2px">DB write + Kafka publish</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BLOCKING panel -->
+  <div class="panel">
+    <div class="panel-header">
+      <div class="dot dot-block"></div>
+      <div class="panel-title">Traditional Blocking / Monolith</div>
+      <span class="badge badge-block">SYNC</span>
+    </div>
+    <div class="panel-body">
+      <div class="timeline" id="block-timeline">
+        <div class="step" id="b-step-0">
+          <div class="step-icon">📥</div>
+          <div class="step-info">
+            <div class="step-name">HTTP Request received</div>
+            <div class="step-detail">POST /orders-blocking → Controller</div>
+          </div>
+          <div class="step-ms block-ms" id="b-ms-0">—</div>
+        </div>
+        <div class="step" id="b-step-1">
+          <div class="step-icon">🗄️</div>
+          <div class="step-info">
+            <div class="step-name">DB: save order</div>
+            <div class="step-detail">orderRepo.save() — await...</div>
+          </div>
+          <div class="step-ms block-ms" id="b-ms-1">—</div>
+        </div>
+        <div class="step" id="b-step-2">
+          <div class="step-icon">💳</div>
+          <div class="step-info">
+            <div class="step-name">HTTP → payment-service</div>
+            <div class="step-detail">await firstValueFrom(httpService.post...)</div>
+          </div>
+          <div class="step-ms block-ms" id="b-ms-2">—</div>
+        </div>
+        <div class="step" id="b-step-3">
+          <div class="step-icon">🍕</div>
+          <div class="step-info">
+            <div class="step-name">HTTP → restaurant-service</div>
+            <div class="step-detail">await firstValueFrom(httpService.post...)</div>
+          </div>
+          <div class="step-ms block-ms" id="b-ms-3">—</div>
+        </div>
+        <div class="step" id="b-step-4">
+          <div class="step-icon">🛵</div>
+          <div class="step-info">
+            <div class="step-name">HTTP → dispatch-service</div>
+            <div class="step-detail">await firstValueFrom(httpService.post...)</div>
+          </div>
+          <div class="step-ms block-ms" id="b-ms-4">—</div>
+        </div>
+        <div class="step" id="b-step-5">
+          <div class="step-icon">✅</div>
+          <div class="step-info">
+            <div class="step-name">201 Created returned to client</div>
+            <div class="step-detail">After all services respond</div>
+          </div>
+          <div class="step-ms block-ms" id="b-ms-5">—</div>
+        </div>
+        <!-- Spacer to match height -->
+        <div style="margin: 6px 0; padding: 4px 10px; font-size: 10px; color: var(--block)80; border-left: 2px solid var(--block)40;">
+          ↑ Client held open the ENTIRE time. If any service fails → error cascade
+        </div>
+        <div class="step" style="border-color: var(--block)30; background: var(--block-dim);">
+          <div class="step-icon">⚠️</div>
+          <div class="step-info">
+            <div class="step-name">If payment-service is slow/down</div>
+            <div class="step-detail">→ Your endpoint is also slow/down</div>
+          </div>
+          <div class="step-ms block-ms">CASCADE</div>
+        </div>
+      </div>
+      <div class="progress-wrap">
+        <div class="progress-bar pb-block" id="b-progress"></div>
+      </div>
+      <div class="scorecard">
+        <div>
+          <div class="score-label">HTTP Response time</div>
+          <div class="score-val block" id="b-total">—</div>
+        </div>
+        <div style="text-align:right">
+          <div class="score-label">Client waits for</div>
+          <div style="font-size:11px; color: var(--block); margin-top:2px">DB + payment + restaurant + dispatch</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Event log -->
+<div class="event-log">
+  <div class="log-title">⚡ Event Log</div>
+  <div class="log-entries" id="eventLog">
+    <div class="log-entry">
+      <span class="log-time">00:00:000</span>
+      <span class="log-source log-system">SYSTEM</span>
+      <span class="log-msg">Waiting for order... click "Place Order" to start simulation</span>
+    </div>
+  </div>
+</div>
+
+<!-- Verdict -->
+<div class="verdict">
+  <div class="verdict-item" style="border-color: var(--kafka)30; background: var(--kafka-dim);">
+    <h3 class="tag-good">✓ Kafka + CQRS wins when...</h3>
+    <p>You need <strong style="color:var(--kafka)">low HTTP latency</strong>, high throughput, or resilience to downstream failures. Each service fails independently. Orders keep flowing even if payment-service is slow. Read/write DBs scale separately. Perfect for scale-out.</p>
+  </div>
+  <div class="verdict-item" style="border-color: var(--block)30; background: var(--block-dim);">
+    <h3 class="tag-bad">⚠ Blocking is fine when...</h3>
+    <p>Your app is small, team is small, or you need <strong style="color:var(--amber)">strong consistency</strong> (e.g. inventory check must be synchronous). Simpler to debug and trace. No Kafka infra needed. Don't over-engineer if you have &lt;1k orders/day.</p>
+  </div>
+  <div class="verdict-item">
+    <h3 style="color:var(--amber)">CQRS read vs write</h3>
+    <p>The Kafka approach separates the write DB (normalized, for commands) from the read DB (denormalized, for queries). Reads hit a flat pre-joined table — no locks, no joins. Kafka consumers project events into the read model asynchronously.</p>
+  </div>
+  <div class="verdict-item">
+    <h3 style="color:var(--amber)">The tradeoff</h3>
+    <p>Kafka + CQRS = <strong style="color:var(--kafka)">eventual consistency</strong>. The read model may be milliseconds behind. The blocking approach = <strong style="color:var(--amber)">strong consistency</strong> — but you pay for it with latency and coupling. Choose based on your domain needs.</p>
+  </div>
+</div>
+
+<script>
+  let running = false;
+  const speedRange = document.getElementById('speedRange');
+  const speedLabel = document.getElementById('speedLabel');
+
+  speedRange.addEventListener('input', () => {
+    speedLabel.textContent = speedRange.value + '×';
+  });
+
+  function getSpeed() { return parseFloat(speedRange.value); }
+  function delay(ms) { return new Promise(r => setTimeout(r, ms / getSpeed())); }
+
+  function addLog(source, msg, cls) {
+    const log = document.getElementById('eventLog');
+    const t = performance.now();
+    const ms = Math.floor(t % 60000);
+    const ts = String(Math.floor(ms / 1000)).padStart(2, '0') + ':' + String(ms % 1000).padStart(3, '0');
+    const entry = document.createElement('div');
+    entry.className = 'log-entry';
+    entry.innerHTML = `<span class="log-time">00:${ts}</span><span class="log-source ${cls}">${source}</span><span class="log-msg">${msg}</span>`;
+    log.appendChild(entry);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  function activateStep(id, isKafka) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.add(isKafka ? 'active' : 'active-block');
+  }
+
+  function doneStep(id, ms, isKafka) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.remove(isKafka ? 'active' : 'active-block');
+    el.classList.add(isKafka ? 'done' : 'done-block');
+    el.style.borderColor = isKafka ? 'var(--kafka)60' : 'var(--block)60';
+    const msEl = el.querySelector(isKafka ? '.kafka-ms' : '.block-ms');
+    if (msEl) msEl.textContent = ms + 'ms';
+  }
+
+  function setProgress(id, pct) {
+    document.getElementById(id).style.width = pct + '%';
+  }
+
+  function setTotal(id, ms, type) {
+    const el = document.getElementById(id);
+    el.textContent = ms + 'ms';
+  }
+
+  async function runKafka() {
+    const steps = [
+      { id: 'k-step-0', ms: 5,   log: ['ORDER-SVC', 'POST /orders received, dispatching PlaceOrderCommand', 'log-kafka'] },
+      { id: 'k-step-1', ms: 3,   log: ['COMMAND-BUS', 'PlaceOrderCommand → PlaceOrderHandler', 'log-kafka'] },
+      { id: 'k-step-2', ms: 18,  log: ['WRITE-DB', 'INSERT order id=ord_9f3k status=PENDING', 'log-kafka'] },
+      { id: 'k-step-3', ms: 8,   log: ['KAFKA', 'Published → orders.placed (fire & forget)', 'log-kafka'] },
+      { id: 'k-step-4', ms: 2,   log: ['ORDER-SVC', '→ Client: 202 Accepted { orderId, status: PENDING }', 'log-kafka'] },
+    ];
+
+    let elapsed = 0;
+    const total = steps.reduce((s, x) => s + x.ms, 0);
+
+    for (let i = 0; i < steps.length; i++) {
+      const s = steps[i];
+      activateStep(s.id, true);
+      addLog(...s.log);
+      setProgress('k-progress', Math.round((elapsed / total) * 100));
+      await delay(s.ms * 18);
+      elapsed += s.ms;
+      doneStep(s.id, s.ms, true);
+    }
+
+    setProgress('k-progress', 100);
+    setTotal('k-total', total, 'kafka');
+
+    // Async steps (happen after 202 is returned)
+    await delay(80);
+    const asyncSteps = [
+      { id: 'k-step-5', ms: 210, log: ['PAYMENT-SVC', 'Consumed orders.placed → charging card...', 'log-kafka'] },
+      { id: 'k-step-6', ms: 145, log: ['RESTAURANT-SVC', 'Consumed orders.placed → notifying restaurant', 'log-kafka'] },
+      { id: 'k-step-7', ms: 320, log: ['DISPATCH-SVC', 'Consumed payments.completed → assigning driver', 'log-kafka'] },
+    ];
+
+    // Run all async steps concurrently (they subscribe independently)
+    asyncSteps.forEach(async (s) => {
+      await delay(Math.random() * 100);
+      activateStep(s.id, true);
+      addLog(...s.log);
+      await delay(s.ms * 6);
+      doneStep(s.id, s.ms, true);
+    });
+  }
+
+  async function runBlocking() {
+    const steps = [
+      { id: 'b-step-0', ms: 5,   log: ['ORDER-SVC', 'POST /orders-blocking received', 'log-block'] },
+      { id: 'b-step-1', ms: 22,  log: ['WRITE-DB', 'await orderRepo.save() — holding connection...', 'log-block'] },
+      { id: 'b-step-2', ms: 210, log: ['PAYMENT-SVC', 'await httpService.post() to payment-service — blocking...', 'log-block'] },
+      { id: 'b-step-3', ms: 155, log: ['RESTAURANT-SVC', 'await httpService.post() to restaurant-service — blocking...', 'log-block'] },
+      { id: 'b-step-4', ms: 310, log: ['DISPATCH-SVC', 'await httpService.post() to dispatch-service — blocking...', 'log-block'] },
+      { id: 'b-step-5', ms: 5,   log: ['ORDER-SVC', '→ Client: 201 Created (after 700ms+ of waiting)', 'log-block'] },
+    ];
+
+    let elapsed = 0;
+    const total = steps.reduce((s, x) => s + x.ms, 0);
+
+    for (let i = 0; i < steps.length; i++) {
+      const s = steps[i];
+      activateStep(s.id, false);
+      addLog(...s.log);
+      setProgress('b-progress', Math.round((elapsed / total) * 100));
+      await delay(s.ms * 4);
+      elapsed += s.ms;
+      doneStep(s.id, s.ms, false);
+    }
+
+    setProgress('b-progress', 100);
+    setTotal('b-total', total, 'block');
+    addLog('ORDER-SVC', `⚠ Total latency: ${total}ms — client was blocked the entire time`, 'log-block');
+  }
+
+  async function runSimulation() {
+    if (running) return;
+    running = true;
+    document.getElementById('runBtn').disabled = true;
+    document.getElementById('runBtn').textContent = '⏳ Simulating...';
+
+    // Clear log
+    document.getElementById('eventLog').innerHTML = '';
+    addLog('SYSTEM', '▶ Placing order on both architectures simultaneously...', 'log-system');
+
+    // Run both in parallel
+    await Promise.all([runKafka(), runBlocking()]);
+
+    document.getElementById('runBtn').disabled = false;
+    document.getElementById('runBtn').textContent = '▶ Place Order';
+    running = false;
+  }
+
+  function resetAll() {
+    if (running) return;
+    // Reset steps
+    for (let i = 0; i <= 7; i++) {
+      const k = document.getElementById(`k-step-${i}`);
+      const b = document.getElementById(`b-step-${i}`);
+      if (k) {
+        k.classList.remove('active', 'done');
+        k.style.borderColor = '';
+        const ms = k.querySelector('.kafka-ms');
+        if (ms) ms.textContent = '—';
+      }
+      if (b) {
+        b.classList.remove('active-block', 'done-block');
+        b.style.borderColor = '';
+        const ms = b.querySelector('.block-ms');
+        if (ms) ms.textContent = '—';
+      }
+    }
+    setProgress('k-progress', 0);
+    setProgress('b-progress', 0);
+    document.getElementById('k-total').textContent = '—';
+    document.getElementById('b-total').textContent = '—';
+    document.getElementById('eventLog').innerHTML = `
+      <div class="log-entry">
+        <span class="log-time">00:00:000</span>
+        <span class="log-source log-system">SYSTEM</span>
+        <span class="log-msg">Reset. Click "Place Order" to run again.</span>
+      </div>`;
+  }
+</script>
+</body>
+</html>

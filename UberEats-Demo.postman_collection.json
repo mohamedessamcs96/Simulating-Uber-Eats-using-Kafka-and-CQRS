@@ -1,0 +1,213 @@
+{
+  "info": {
+    "name": "UberEats Microservices Demo",
+    "description": "CQRS + Kafka async flow vs Traditional blocking flow — running on localhost:3000",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000"
+    },
+    {
+      "key": "orderId",
+      "value": ""
+    },
+    {
+      "key": "blockingOrderId",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": " CQRS + Kafka (Async)",
+      "item": [
+        {
+          "name": "Place Order (202 Accepted)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "pm.collectionVariables.set('orderId', res.data.orderId);",
+                  "pm.test('Status is 202', () => pm.response.to.have.status(202));",
+                  "pm.test('success is true', () => pm.expect(res.success).to.be.true);",
+                  "pm.test('Has data object', () => pm.expect(res.data).to.be.an('object'));",
+                  "pm.test('Has orderId', () => pm.expect(res.data.orderId).to.be.a('string'));",
+                  "pm.test('Status is PENDING', () => pm.expect(res.data.status).to.eql('PENDING'));",
+                  "console.log('orderId saved:', res.data.orderId);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"restaurantId\": \"rest-mcdonalds-001\",\n  \"items\": [\n    { \"itemId\": \"big-mac\", \"quantity\": 2, \"price\": 8.99 },\n    { \"itemId\": \"fries-large\", \"quantity\": 1, \"price\": 3.49 },\n    { \"itemId\": \"coke\", \"quantity\": 2, \"price\": 2.50 }\n  ],\n  \"deliveryAddress\": \"123 Main St, London, UK\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders"]
+            },
+            "description": "Dispatches a PlaceOrderCommand via CQRS CommandBus.\nReturns 202 immediately (~10ms) — order is persisted to DB and a Kafka event fires async.\nThe client does NOT wait for payment, restaurant, or dispatch."
+          }
+        },
+        {
+          "name": "Get Order Status (Read Model)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('success is true', () => pm.expect(res.success).to.be.true);",
+                  "pm.test('Has data object', () => pm.expect(res.data).to.be.an('object'));",
+                  "pm.test('Has orderId', () => pm.expect(res.data.orderId).to.be.a('string'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{orderId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", "{{orderId}}"]
+            },
+            "description": "Queries the denormalized read-model via CQRS QueryBus.\nHits a flat, pre-projected table — no joins, no locks.\norderId is auto-populated from the Place Order request above."
+          }
+        },
+        {
+          "name": "Get Order Status (hardcoded id)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/orders/PASTE-ORDER-ID-HERE",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", "PASTE-ORDER-ID-HERE"]
+            },
+            "description": "Use this if you want to query a specific order by ID manually."
+          }
+        },
+        {
+          "name": "Place Order — Large Cart",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"restaurantId\": \"rest-pizza-hut-007\",\n  \"items\": [\n    { \"itemId\": \"pepperoni-xl\", \"quantity\": 1, \"price\": 18.99 },\n    { \"itemId\": \"garlic-bread\", \"quantity\": 2, \"price\": 4.50 },\n    { \"itemId\": \"tiramisu\", \"quantity\": 3, \"price\": 6.00 },\n    { \"itemId\": \"sparkling-water\", \"quantity\": 4, \"price\": 1.99 }\n  ],\n  \"deliveryAddress\": \"456 Oxford Street, London, UK\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders"]
+            }
+          }
+        },
+        {
+          "name": "Place Order — Validation: Empty Items",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"restaurantId\": \"rest-001\",\n  \"items\": [],\n  \"deliveryAddress\": \"123 Main St\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders"]
+            },
+            "description": "Edge case — empty items array. totalAmount will be 0."
+          }
+        }
+      ]
+    },
+    {
+      "name": " Blocking / Traditional (Sync)",
+      "item": [
+        {
+          "name": "Place Order Blocking (201 Created)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "pm.collectionVariables.set('blockingOrderId', res.data.id);",
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "pm.test('success is true', () => pm.expect(res.success).to.be.true);",
+                  "pm.test('Has data object', () => pm.expect(res.data).to.be.an('object'));",
+                  "pm.test('Status is DRIVER_ASSIGNED', () => pm.expect(res.data.status).to.eql('DRIVER_ASSIGNED'));",
+                  "pm.test('Has paymentId', () => pm.expect(res.data.paymentId).to.be.a('string'));",
+                  "pm.test('Has driverName', () => pm.expect(res.data.driverName).to.be.a('string'));",
+                  "console.log('Took ~650ms — client was blocked the entire time');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"restaurantId\": \"rest-mcdonalds-001\",\n  \"items\": [\n    { \"itemId\": \"big-mac\", \"quantity\": 1, \"price\": 8.99 }\n  ],\n  \"deliveryAddress\": \"123 Main St, London, UK\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/orders-blocking",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders-blocking"]
+            },
+            "description": "Traditional blocking endpoint — holds the HTTP connection open for ~650ms.\n\nInternally makes 3 sequential calls (simulated):\n  1. payment-service  → ~200ms\n  2. restaurant-service → ~150ms\n  3. dispatch-service   → ~300ms\n\nReturns 201 with the fully resolved order (status: DRIVER_ASSIGNED).\n\nCompare the response time to POST /orders above — that one returns in ~10ms."
+          }
+        },
+        {
+          "name": "Get Blocking Order",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('success is true', () => pm.expect(res.success).to.be.true);",
+                  "pm.test('Has data', () => pm.expect(res.data).to.be.an('object'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/orders-blocking/{{blockingOrderId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders-blocking", "{{blockingOrderId}}"]
+            },
+            "description": "Reads from the write table directly — the same table used for INSERTs and UPDATEs.\nSELECTs compete with writes for DB locks (no CQRS read/write separation).\n\nblockingOrderId is auto-saved from Place Order Blocking above."
+          }
+        }
+      ]
+    }
+  ]
+}
