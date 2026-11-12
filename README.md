@@ -17,7 +17,7 @@ A NestJS demo comparing **CQRS + Kafka async architecture** vs **traditional blo
 Run this once to install all dependencies:
 
 ```bash
-cd "/Users/herotech/Downloads/Micro Services - Uber Eats"
+cd Simulating-Uber-Eats-using-Kafka-and-CQRS
 npm install
 ```
 
@@ -26,7 +26,7 @@ npm install
 ## Running the Backend
 
 ```bash
-cd "/Users/herotech/Downloads/Micro Services - Uber Eats"
+cd Simulating-Uber-Eats-using-Kafka-and-CQRS
 KAFKAJS_NO_PARTITIONER_WARNING=1 npx ts-node -r tsconfig-paths/register src/main.ts
 ```
 
@@ -60,7 +60,7 @@ kill $(lsof -ti :3000)
 The frontend is a standalone HTML file — no server needed:
 
 ```bash
-open "/Users/herotech/Downloads/Micro Services - Uber Eats/ubereats-comparison-frontend.html"
+open ubereats-comparison-frontend.html
 ```
 
 Or just double-click `ubereats-comparison-frontend.html` in Finder.
