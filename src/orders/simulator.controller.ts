@@ -6,10 +6,13 @@ import {
   HttpCode,
   HttpStatus,
   NotFoundException,
-} from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { OrderReadModel, OrderReadStatus } from './read-models/order.read-model';
+} from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import {
+  OrderReadModel,
+  OrderReadStatus,
+} from "./read-models/order.read-model";
 
 /**
  * KAFKA EVENTS SIMULATOR
@@ -30,7 +33,7 @@ import { OrderReadModel, OrderReadStatus } from './read-models/order.read-model'
  *  -- OR failure path --
  *  POST /simulator/:id/payment-failed  →  (CANCELLED)
  */
-@Controller('simulator')
+@Controller("simulator")
 export class SimulatorController {
   constructor(
     @InjectRepository(OrderReadModel)
@@ -39,7 +42,8 @@ export class SimulatorController {
 
   private async findOrFail(orderId: string): Promise<OrderReadModel> {
     const order = await this.readModelRepo.findOne({ where: { orderId } });
-    if (!order) throw new NotFoundException(`Order ${orderId} not found in read model`);
+    if (!order)
+      throw new NotFoundException(`Order ${orderId} not found in read model`);
     return order;
   }
 
@@ -47,14 +51,15 @@ export class SimulatorController {
    * Simulates: payment-service consumed orders.placed → charged card
    * Kafka topic: payments.completed
    */
-  @Post(':orderId/payment-completed')
+  @Post(":orderId/payment-completed")
   @HttpCode(HttpStatus.OK)
   async paymentCompleted(
-    @Param('orderId') orderId: string,
+    @Param("orderId") orderId: string,
     @Body() body: { paymentId?: string },
   ) {
     await this.findOrFail(orderId);
-    const paymentId = body.paymentId ?? `pay_${Math.random().toString(36).slice(2, 10)}`;
+    const paymentId =
+      body.paymentId ?? `pay_${Math.random().toString(36).slice(2, 10)}`;
     await this.readModelRepo.update(
       { orderId },
       { status: OrderReadStatus.PAYMENT_CONFIRMED, paymentId },
@@ -62,8 +67,8 @@ export class SimulatorController {
     const updated = await this.readModelRepo.findOne({ where: { orderId } });
     return {
       success: true,
-      event: 'payments.completed',
-      description: 'payment-service charged the card — read model updated',
+      event: "payments.completed",
+      description: "payment-service charged the card — read model updated",
       data: updated,
     };
   }
@@ -72,14 +77,14 @@ export class SimulatorController {
    * Simulates: payment-service → payment failed
    * Kafka topic: payments.failed
    */
-  @Post(':orderId/payment-failed')
+  @Post(":orderId/payment-failed")
   @HttpCode(HttpStatus.OK)
   async paymentFailed(
-    @Param('orderId') orderId: string,
+    @Param("orderId") orderId: string,
     @Body() body: { reason?: string },
   ) {
     await this.findOrFail(orderId);
-    const reason = body.reason ?? 'Insufficient funds';
+    const reason = body.reason ?? "Insufficient funds";
     await this.readModelRepo.update(
       { orderId },
       { status: OrderReadStatus.CANCELLED, failureReason: reason },
@@ -87,8 +92,8 @@ export class SimulatorController {
     const updated = await this.readModelRepo.findOne({ where: { orderId } });
     return {
       success: true,
-      event: 'payments.failed',
-      description: 'payment-service reported failure — order cancelled',
+      event: "payments.failed",
+      description: "payment-service reported failure — order cancelled",
       data: updated,
     };
   }
@@ -97,14 +102,14 @@ export class SimulatorController {
    * Simulates: restaurant-service consumed orders.placed → confirmed the order
    * Kafka topic: restaurants.confirmed
    */
-  @Post(':orderId/restaurant-confirmed')
+  @Post(":orderId/restaurant-confirmed")
   @HttpCode(HttpStatus.OK)
   async restaurantConfirmed(
-    @Param('orderId') orderId: string,
+    @Param("orderId") orderId: string,
     @Body() body: { estimatedPickupTime?: string },
   ) {
     await this.findOrFail(orderId);
-    const estimatedPickupTime = body.estimatedPickupTime ?? '25 minutes';
+    const estimatedPickupTime = body.estimatedPickupTime ?? "25 minutes";
     await this.readModelRepo.update(
       { orderId },
       { status: OrderReadStatus.PREPARING, estimatedPickupTime },
@@ -112,8 +117,9 @@ export class SimulatorController {
     const updated = await this.readModelRepo.findOne({ where: { orderId } });
     return {
       success: true,
-      event: 'restaurants.confirmed',
-      description: 'restaurant-service confirmed and started preparing — read model updated',
+      event: "restaurants.confirmed",
+      description:
+        "restaurant-service confirmed and started preparing — read model updated",
       data: updated,
     };
   }
@@ -122,15 +128,15 @@ export class SimulatorController {
    * Simulates: dispatch-service consumed payments.completed → assigned a driver
    * Kafka topic: dispatch.assigned
    */
-  @Post(':orderId/dispatch-assigned')
+  @Post(":orderId/dispatch-assigned")
   @HttpCode(HttpStatus.OK)
   async dispatchAssigned(
-    @Param('orderId') orderId: string,
+    @Param("orderId") orderId: string,
     @Body() body: { driverName?: string; driverPhone?: string },
   ) {
     await this.findOrFail(orderId);
-    const driverName = body.driverName ?? 'John Driver';
-    const driverPhone = body.driverPhone ?? '+44 7700 900123';
+    const driverName = body.driverName ?? "John Driver";
+    const driverPhone = body.driverPhone ?? "+44 7700 900123";
     await this.readModelRepo.update(
       { orderId },
       { status: OrderReadStatus.OUT_FOR_DELIVERY, driverName, driverPhone },
@@ -138,8 +144,8 @@ export class SimulatorController {
     const updated = await this.readModelRepo.findOne({ where: { orderId } });
     return {
       success: true,
-      event: 'dispatch.assigned',
-      description: 'dispatch-service assigned a driver — read model updated',
+      event: "dispatch.assigned",
+      description: "dispatch-service assigned a driver — read model updated",
       data: updated,
     };
   }
@@ -148,9 +154,9 @@ export class SimulatorController {
    * Simulates: dispatch-service → order delivered
    * Kafka topic: dispatch.delivered
    */
-  @Post(':orderId/delivered')
+  @Post(":orderId/delivered")
   @HttpCode(HttpStatus.OK)
-  async delivered(@Param('orderId') orderId: string) {
+  async delivered(@Param("orderId") orderId: string) {
     await this.findOrFail(orderId);
     await this.readModelRepo.update(
       { orderId },
@@ -159,8 +165,8 @@ export class SimulatorController {
     const updated = await this.readModelRepo.findOne({ where: { orderId } });
     return {
       success: true,
-      event: 'dispatch.delivered',
-      description: 'dispatch-service confirmed delivery — order complete',
+      event: "dispatch.delivered",
+      description: "dispatch-service confirmed delivery — order complete",
       data: updated,
     };
   }

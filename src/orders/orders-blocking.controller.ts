@@ -7,10 +7,10 @@ import {
   HttpCode,
   HttpStatus,
   Logger,
-} from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { Order, OrderStatus } from './entities/order.entity';
+} from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { Order, OrderStatus } from "./entities/order.entity";
 
 /** Simulates a real HTTP call to a downstream service taking `ms` milliseconds */
 const simulateHttpCall = (ms: number) =>
@@ -42,7 +42,7 @@ class PlaceOrderDto {
  *
  * All services are TIGHTLY COUPLED via direct HTTP.
  */
-@Controller('orders-blocking')
+@Controller("orders-blocking")
 export class BlockingOrdersController {
   private readonly logger = new Logger(BlockingOrdersController.name);
 
@@ -54,10 +54,11 @@ export class BlockingOrdersController {
   @Post()
   @HttpCode(HttpStatus.CREATED)
   async placeOrder(@Body() dto: PlaceOrderDto) {
-    const userId = 'user-123';
+    const userId = "user-123";
 
     const totalAmount = dto.items.reduce(
-      (sum, i) => sum + i.price * i.quantity, 0,
+      (sum, i) => sum + i.price * i.quantity,
+      0,
     );
 
     const order = await this.orderRepo.save(
@@ -87,14 +88,16 @@ export class BlockingOrdersController {
     // In production: await firstValueFrom(httpService.post('http://restaurant-service:3002/notify', ...))
     this.logger.log(`[restaurant-service] POST /notify — waiting ~150ms...`);
     await simulateHttpCall(150);
-    await this.orderRepo.update(order.id, { status: OrderStatus.RESTAURANT_NOTIFIED });
+    await this.orderRepo.update(order.id, {
+      status: OrderStatus.RESTAURANT_NOTIFIED,
+    });
     this.logger.log(`[restaurant-service] notified`);
 
     // ❌ BLOCKING call to dispatch-service — ~300ms wait (simulated)
     // In production: await firstValueFrom(httpService.post('http://dispatch-service:3003/assign', ...))
     this.logger.log(`[dispatch-service] POST /assign — waiting ~300ms...`);
     await simulateHttpCall(300);
-    const driverName = 'John Driver';
+    const driverName = "John Driver";
     await this.orderRepo.update(order.id, {
       status: OrderStatus.DRIVER_ASSIGNED,
       driverName,
@@ -108,8 +111,8 @@ export class BlockingOrdersController {
     };
   }
 
-  @Get(':id')
-  async getOrderStatus(@Param('id') orderId: string) {
+  @Get(":id")
+  async getOrderStatus(@Param("id") orderId: string) {
     const order = await this.orderRepo.findOne({ where: { id: orderId } });
     return {
       success: true,

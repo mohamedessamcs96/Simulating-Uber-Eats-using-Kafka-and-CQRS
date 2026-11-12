@@ -1,16 +1,21 @@
-import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn } from 'typeorm';
+import {
+  Entity,
+  Column,
+  PrimaryGeneratedColumn,
+  CreateDateColumn,
+} from "typeorm";
 
 export enum OrderStatus {
-  PENDING = 'PENDING',
-  PAYMENT_PROCESSING = 'PAYMENT_PROCESSING',
-  RESTAURANT_NOTIFIED = 'RESTAURANT_NOTIFIED',
-  DRIVER_ASSIGNED = 'DRIVER_ASSIGNED',
-  CANCELLED = 'CANCELLED',
+  PENDING = "PENDING",
+  PAYMENT_PROCESSING = "PAYMENT_PROCESSING",
+  RESTAURANT_NOTIFIED = "RESTAURANT_NOTIFIED",
+  DRIVER_ASSIGNED = "DRIVER_ASSIGNED",
+  CANCELLED = "CANCELLED",
 }
 
-@Entity('orders')
+@Entity("orders")
 export class Order {
-  @PrimaryGeneratedColumn('uuid')
+  @PrimaryGeneratedColumn("uuid")
   id: string;
 
   @Column()
@@ -19,16 +24,16 @@ export class Order {
   @Column()
   restaurantId: string;
 
-  @Column({ type: 'simple-json' })
+  @Column({ type: "simple-json" })
   items: Array<{ itemId: string; quantity: number; price: number }>;
 
   @Column()
   deliveryAddress: string;
 
-  @Column({ type: 'float' })
+  @Column({ type: "float" })
   totalAmount: number;
 
-  @Column({ type: 'text', default: OrderStatus.PENDING })
+  @Column({ type: "text", default: OrderStatus.PENDING })
   status: OrderStatus;
 
   @Column({ nullable: true })

@@ -1,5 +1,10 @@
-import { Injectable, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/common';
-import { Kafka, Producer, CompressionTypes } from 'kafkajs';
+import {
+  Injectable,
+  OnModuleInit,
+  OnModuleDestroy,
+  Logger,
+} from "@nestjs/common";
+import { Kafka, Producer, CompressionTypes } from "kafkajs";
 
 /**
  * KAFKA PRODUCER SERVICE
@@ -23,8 +28,8 @@ export class KafkaProducerService implements OnModuleInit, OnModuleDestroy {
   private connected = false;
 
   private readonly kafka = new Kafka({
-    clientId: 'order-service',
-    brokers: [process.env.KAFKA_BROKER || 'localhost:9092'],
+    clientId: "order-service",
+    brokers: [process.env.KAFKA_BROKER || "localhost:9092"],
     retry: { initialRetryTime: 300, retries: 2 },
   });
 
@@ -36,18 +41,23 @@ export class KafkaProducerService implements OnModuleInit, OnModuleDestroy {
     try {
       await this.producer.connect();
       this.connected = true;
-      this.logger.log('Kafka producer connected');
+      this.logger.log("Kafka producer connected");
     } catch (e) {
       this.logger.warn(
         `Kafka unavailable (${e.message}) — running without Kafka. ` +
-        'Install via: brew install kafka && brew services start zookeeper && brew services start kafka',
+          "Install via: brew install kafka && brew services start zookeeper && brew services start kafka",
       );
     }
   }
 
-  async publish(topic: string, payload: Record<string, unknown>): Promise<void> {
+  async publish(
+    topic: string,
+    payload: Record<string, unknown>,
+  ): Promise<void> {
     if (!this.connected) {
-      this.logger.warn(`[Kafka] Skipping publish to [${topic}] — not connected`);
+      this.logger.warn(
+        `[Kafka] Skipping publish to [${topic}] — not connected`,
+      );
       return;
     }
     await this.producer.send({
@@ -58,7 +68,7 @@ export class KafkaProducerService implements OnModuleInit, OnModuleDestroy {
           key: String(payload.orderId ?? payload.userId ?? Date.now()),
           value: JSON.stringify(payload),
           headers: {
-            source: 'order-service',
+            source: "order-service",
             timestamp: new Date().toISOString(),
           },
         },

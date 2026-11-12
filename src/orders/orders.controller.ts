@@ -6,10 +6,10 @@ import {
   Param,
   HttpCode,
   HttpStatus,
-} from '@nestjs/common';
-import { CommandBus, QueryBus } from '@nestjs/cqrs';
-import { PlaceOrderCommand } from './commands/place-order.command';
-import { GetOrderStatusQuery } from './queries/get-order-status.query';
+} from "@nestjs/common";
+import { CommandBus, QueryBus } from "@nestjs/cqrs";
+import { PlaceOrderCommand } from "./commands/place-order.command";
+import { GetOrderStatusQuery } from "./queries/get-order-status.query";
 
 class PlaceOrderDto {
   restaurantId: string;
@@ -30,7 +30,7 @@ class PlaceOrderDto {
  * The controller knows NOTHING about downstream services. It just fires
  * commands into the bus and returns. No HTTP calls to payment-service here.
  */
-@Controller('orders')
+@Controller("orders")
 export class OrdersController {
   constructor(
     private readonly commandBus: CommandBus,
@@ -40,7 +40,7 @@ export class OrdersController {
   @Post()
   @HttpCode(HttpStatus.ACCEPTED)
   async placeOrder(@Body() dto: PlaceOrderDto) {
-    const userId = 'user-123';
+    const userId = "user-123";
 
     const orderId = await this.commandBus.execute(
       new PlaceOrderCommand(
@@ -55,14 +55,14 @@ export class OrdersController {
       success: true,
       data: {
         orderId,
-        status: 'PENDING',
-        message: 'Order received. Track progress at GET /orders/' + orderId,
+        status: "PENDING",
+        message: "Order received. Track progress at GET /orders/" + orderId,
       },
     };
   }
 
-  @Get(':id')
-  async getOrderStatus(@Param('id') orderId: string) {
+  @Get(":id")
+  async getOrderStatus(@Param("id") orderId: string) {
     const order = await this.queryBus.execute(new GetOrderStatusQuery(orderId));
     return {
       success: true,

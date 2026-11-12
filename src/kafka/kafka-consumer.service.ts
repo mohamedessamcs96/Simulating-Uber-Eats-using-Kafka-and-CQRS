@@ -1,8 +1,16 @@
-import { Injectable, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/common';
-import { Kafka, Consumer, EachMessagePayload } from 'kafkajs';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { OrderReadModel, OrderReadStatus } from '../orders/read-models/order.read-model';
+import {
+  Injectable,
+  OnModuleInit,
+  OnModuleDestroy,
+  Logger,
+} from "@nestjs/common";
+import { Kafka, Consumer, EachMessagePayload } from "kafkajs";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import {
+  OrderReadModel,
+  OrderReadStatus,
+} from "../orders/read-models/order.read-model";
 
 /**
  * KAFKA CONSUMER — Order Service (Read Model Projector)
@@ -25,8 +33,8 @@ export class KafkaConsumerService implements OnModuleInit, OnModuleDestroy {
   private consumer: Consumer;
 
   private readonly kafka = new Kafka({
-    clientId: 'order-service-consumer',
-    brokers: [process.env.KAFKA_BROKER || 'localhost:9092'],
+    clientId: "order-service-consumer",
+    brokers: [process.env.KAFKA_BROKER || "localhost:9092"],
     retry: { initialRetryTime: 300, retries: 2 },
   });
 
@@ -36,17 +44,17 @@ export class KafkaConsumerService implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   async onModuleInit() {
-    this.consumer = this.kafka.consumer({ groupId: 'order-service-group' });
+    this.consumer = this.kafka.consumer({ groupId: "order-service-group" });
     try {
       await this.consumer.connect();
 
       await this.consumer.subscribe({
         topics: [
-          'payments.completed',     // from payment-service
-          'payments.failed',        // from payment-service
-          'restaurants.confirmed',  // from restaurant-service
-          'dispatch.assigned',      // from dispatch-service
-          'dispatch.delivered',     // from dispatch-service
+          "payments.completed", // from payment-service
+          "payments.failed", // from payment-service
+          "restaurants.confirmed", // from restaurant-service
+          "dispatch.assigned", // from dispatch-service
+          "dispatch.delivered", // from dispatch-service
         ],
         fromBeginning: false,
       });
@@ -57,42 +65,48 @@ export class KafkaConsumerService implements OnModuleInit, OnModuleDestroy {
         },
       });
 
-      this.logger.log('Kafka consumer running');
+      this.logger.log("Kafka consumer running");
     } catch (e) {
       this.logger.warn(
         `Kafka unavailable (${e.message}) — consumer not started. ` +
-        'Install via: brew install kafka && brew services start zookeeper && brew services start kafka',
+          "Install via: brew install kafka && brew services start zookeeper && brew services start kafka",
       );
     }
   }
 
   private async handleMessage({ topic, message }: EachMessagePayload) {
-    const data = JSON.parse(message.value?.toString() ?? '{}');
+    const data = JSON.parse(message.value?.toString() ?? "{}");
     this.logger.debug(`Received [${topic}]: ${JSON.stringify(data)}`);
 
     switch (topic) {
-      case 'payments.completed':
+      case "payments.completed":
         await this.readModelRepo.update(
           { orderId: data.orderId },
-          { status: OrderReadStatus.PAYMENT_CONFIRMED, paymentId: data.paymentId },
+          {
+            status: OrderReadStatus.PAYMENT_CONFIRMED,
+            paymentId: data.paymentId,
+          },
         );
         break;
 
-      case 'payments.failed':
+      case "payments.failed":
         await this.readModelRepo.update(
           { orderId: data.orderId },
           { status: OrderReadStatus.CANCELLED, failureReason: data.reason },
         );
         break;
 
-      case 'restaurants.confirmed':
+      case "restaurants.confirmed":
         await this.readModelRepo.update(
           { orderId: data.orderId },
-          { status: OrderReadStatus.PREPARING, estimatedPickupTime: data.estimatedPickupTime },
+          {
+            status: OrderReadStatus.PREPARING,
+            estimatedPickupTime: data.estimatedPickupTime,
+          },
         );
         break;
 
-      case 'dispatch.assigned':
+      case "dispatch.assigned":
         await this.readModelRepo.update(
           { orderId: data.orderId },
           {
@@ -103,7 +117,7 @@ export class KafkaConsumerService implements OnModuleInit, OnModuleDestroy {
         );
         break;
 
-      case 'dispatch.delivered':
+      case "dispatch.delivered":
         await this.readModelRepo.update(
           { orderId: data.orderId },
           { status: OrderReadStatus.DELIVERED, deliveredAt: new Date() },
@@ -114,7 +128,9 @@ export class KafkaConsumerService implements OnModuleInit, OnModuleDestroy {
 
   async onModuleDestroy() {
     if (this.consumer) {
-      try { await this.consumer.disconnect(); } catch {}
+      try {
+        await this.consumer.disconnect();
+      } catch {}
     }
   }
 }
