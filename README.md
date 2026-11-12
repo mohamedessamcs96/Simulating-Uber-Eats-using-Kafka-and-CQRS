@@ -223,6 +223,6 @@ Then restart the backend — it will automatically connect.
 Delete the SQLite file and restart the backend — it recreates the schema automatically:
 
 ```bash
-rm "/Users/herotech/Downloads/Micro Services - Uber Eats/ubereats-dev.db"
+rm ubereats-dev.db
 ```
 # Simulating-Uber-Eats-using-Kafka-and-CQRS
