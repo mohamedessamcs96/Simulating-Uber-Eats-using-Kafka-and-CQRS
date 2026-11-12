@@ -1,1 +1,21 @@
 node_modules
+
+# Added by cleanup
+# Dependencies
+node_modules/
+venv/
+.venv/
+# Python
+__pycache__/
+*.pyc
+# Build output
+build/
+staticfiles/
+# Local data and secrets
+*.sqlite3
+*.db
+.env
+.env.*
+!.env.example
+# OS
+.DS_Store
